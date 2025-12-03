@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>EVM Ballot Unit Simulator</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Inter font + custom CSS -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #3f0000;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem 1rem;
+            overflow-y: auto;
+        }
+
+        .vote-button {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            background-color: #CC0000;
+            box-shadow: 0 4px #8B0000, 0 0 10px rgba(255, 0, 0, 0.5);
+            transition: all 0.1s ease;
+        }
+
+        .vote-button:hover:not([disabled]) {
+            background-color: #FF1A1A;
+            box-shadow: 0 4px #990000, 0 0 15px rgba(255, 0, 0, 0.8);
+            cursor: pointer;
+        }
+
+        .vote-button:active:not([disabled]) {
+            transform: translateY(2px);
+            box-shadow: 0 2px #8B0000, 0 0 5px rgba(255, 0, 0, 0.5);
+        }
+
+        .vote-button[disabled] {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .indicator-light {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 50%;
+            background-color: #333;
+            transition: all 0.3s ease;
+        }
+
+        .light-on {
+            background-color: #007bff;
+            box-shadow: 0 0 15px #007bff, 0 0 5px rgba(0, 123, 255, 0.8);
+        }
+
+        .ready-light {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 50%;
+            background-color: #00FF00;
+            box-shadow: 0 0 10px #00FF00;
+        }
+
+        .message-box { z-index: 50; }
+
+        .evm-body {
+            border: 1px solid #c9c9c9;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5),
+                        inset 0 0 15px rgba(255, 255, 255, 0.6);
+            transform: perspective(1000px) rotateX(5deg) rotateZ(1deg);
+        }
+
+        .row-no-anim {
+            transition: none !important;
+            animation: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Message Box -->
+    <div id="messageBox" class="message-box fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-70 hidden">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
+            <h3 id="messageTitle" class="text-xl font-bold mb-3 text-green-600">VOTE CAST SUCCESSFULLY!</h3>
+            <p id="messageText" class="mb-4 text-gray-700">Your vote has been recorded.</p>
+            <button onclick="closeMessageBox()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-150 shadow-md">Close</button>
+        </div>
+    </div>
+
+    <!-- Reset Button -->
+    <div class="mb-6">
+        <button id="resetButton" onclick="resetBallot()" class="bg-yellow-500 text-gray-800 px-6 py-3 rounded-full font-bold shadow-lg hover:bg-yellow-400 transition duration-200 uppercase text-sm disabled:opacity-50" disabled>
+            Reset Ballot
+        </button>
+    </div>
+
+    <!-- EVM Unit -->
+    <div id="evmUnit" class="w-full max-w-xl bg-gray-100 rounded-3xl p-6 evm-body">
+
+        <div class="flex justify-between items-center mb-5 border-b-2 border-gray-300 pb-3">
+            <div class="flex items-center space-x-2 text-sm text-gray-600">
+                <span class="font-bold text-gray-800">Ready</span>
+                <div id="readyLight" class="ready-light"></div>
+            </div>
+            <span class="text-lg font-extrabold text-indigo-700 tracking-wider">BALLOT UNIT</span>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-xl shadow-inner border border-gray-300 overflow-hidden">
+
+            <!-- Header -->
+            <div class="grid grid-cols-10 text-xs font-bold text-gray-600 bg-gray-200 border-b border-gray-300">
+                <div class="col-span-1 p-2 border-r text-center">#</div>
+                <div class="col-span-6 p-2 border-r">Candidate</div>
+                <div class="col-span-1 p-2 border-r text-center">Symbol</div>
+                <div class="col-span-1 p-2 border-r text-center">Vote</div>
+                <div class="col-span-1 p-2 text-center">Conf.</div>
+            </div>
+
+            <div id="candidate-list"></div>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+            <div id="confirmationPanel" class="w-16 h-8 bg-blue-400 rounded-lg flex items-center justify-center p-1 shadow-inner">
+                <div id="finalLight" class="w-full h-full rounded-md bg-indigo-900 transition-all duration-1000"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const candidates = [
+            { id: 1, name: "", imageSrc: "" },
+            { id: 2, name: "", imageSrc: "" },
+            { id: 3, name: "", imageSrc: "" },
+            { id: 4, name: "ഹസീന ഷിഹാബ്", imageSrc: "https://upload.wikimedia.org/wikipedia/commons/7/78/Indian_National_Congress_logo.svg" },
+            { id: 5, name: "", imageSrc: "" },
+            { id: 6, name: "", imageSrc: "" },
+            { id: 7, name: "", imageSrc: "" }
+        ];
+
+        let voteCast = false;
+        const resetButton = document.getElementById('resetButton');
+
+        function renderCandidates() {
+            const container = document.getElementById('candidate-list');
+            container.innerHTML = '';
+
+            candidates.forEach(c => {
+                container.innerHTML += `
+                    <div class="grid grid-cols-10 items-center border-b border-gray-200 hover:bg-gray-50 row-no-anim">
+
+                        <div class="col-span-1 p-3 text-sm text-gray-500 border-r text-center">${c.id}</div>
+
+                        <div class="col-span-6 p-3 text-base font-medium text-gray-800 border-r">
+                            ${c.name || ""}
+                        </div>
+
+                        <div class="col-span-1 p-3 border-r flex justify-center">
+                            ${
+                                c.imageSrc
+                                ? `<img src="${c.imageSrc}" class="w-9 h-9 object-contain">`
+                                : `<span class='text-gray-400 text-sm'>—</span>`
+                            }
+                        </div>
+
+                        <div class="col-span-1 flex justify-center border-r">
+                            <button id="btn-${c.id}" class="vote-button" onclick="castVote(${c.id})"></button>
+                        </div>
+
+                        <div class="col-span-1 flex justify-center">
+                            <div id="light-${c.id}" class="indicator-light"></div>
+                        </div>
+
+                    </div>
+                `;
+            });
+
+            resetButton.disabled = true;
+        }
+
+        function showMessageBox(msg, title, ok = true) {
+            document.getElementById('messageTitle').textContent = title;
+            document.getElementById('messageText').textContent = msg;
+            document.getElementById('messageTitle').classList.toggle('text-green-600', ok);
+            document.getElementById('messageTitle').classList.toggle('text-red-600', !ok);
+            document.getElementById('messageBox').classList.remove('hidden');
+        }
+
+        function closeMessageBox() {
+            document.getElementById('messageBox').classList.add('hidden');
+        }
+
+        function castVote(id) {
+            if (voteCast) return showMessageBox("Ballot is locked.", "ALREADY VOTED", false);
+
+            voteCast = true;
+
+            document.getElementById(`light-${id}`).classList.add("light-on");
+
+            document.querySelectorAll(".vote-button").forEach(btn => btn.disabled = true);
+            resetButton.disabled = false;
+
+            document.getElementById("readyLight").classList.remove("ready-light");
+            document.getElementById("readyLight").classList.add("bg-gray-400");
+
+            document.getElementById("finalLight").classList.add("light-on");
+
+            const c = candidates.find(x => x.id === id);
+            showMessageBox(`Vote recorded for ${c.name}.`, "VOTE CAST SUCCESSFULLY!", true);
+        }
+
+        function resetBallot() {
+            if (!voteCast) return showMessageBox("Ballot already ready.", "NO VOTE", false);
+
+            voteCast = false;
+            resetButton.disabled = true;
+
+            document.querySelectorAll(".indicator-light").forEach(l => l.classList.remove("light-on"));
+            document.querySelectorAll(".vote-button").forEach(btn => btn.disabled = false);
+
+            document.getElementById("finalLight").classList.remove("light-on");
+            document.getElementById("readyLight").classList.add("ready-light");
+            document.getElementById("readyLight").classList.remove("bg-gray-400");
+
+            showMessageBox("Ballot reset and ready.", "RESET COMPLETE", true);
+        }
+
+        window.onload = renderCandidates;
+    </script>
+
+</body>
+</html>
